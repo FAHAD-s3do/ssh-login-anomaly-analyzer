@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 
-PATTERN=re.compile(r'sshd(?:\[\d+\])?: (Failed password|Accepted password|Accepted publickey) for (?:invalid user )?(\S+) from (\S+) port \d+')
+PATTERN=re.compile(r'^(?P<stamp>\S+)\s+(?P<host>\S+)\s+sshd(?:\[\d+\])?: (?P<action>Failed password|Accepted password|Accepted publickey) for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+) port \d+')
 
 def parse(lines):
     events=[]; ignored=0
@@ -15,10 +15,10 @@ def parse(lines):
         match=PATTERN.search(line)
         try:
             if not match: raise ValueError()
-            stamp=datetime.fromisoformat(line.split()[0].replace('Z','+00:00'))
+            stamp=datetime.fromisoformat(match['stamp'].replace('Z','+00:00'))
             if stamp.tzinfo is None: raise ValueError()
-            events.append(dict(time=stamp.astimezone(timezone.utc),kind='failure' if match[1]=='Failed password' else 'success',
-                               user=match[2],ip=str(ipaddress.ip_address(match[3])),line=number))
+            events.append(dict(time=stamp.astimezone(timezone.utc),kind='failure' if match['action']=='Failed password' else 'success',
+                               host=match['host'],user=match['user'],ip=str(ipaddress.ip_address(match['ip'])),line=number))
         except (ValueError,IndexError): ignored+=1
     return sorted(events,key=lambda e:(e['time'],e['line'])),ignored
 
@@ -27,19 +27,19 @@ def analyze(lines,threshold=5,window_seconds=300):
     if threshold<1 or window_seconds<1: raise ValueError('Threshold and window must be positive')
     events,ignored=parse(lines); queues=defaultdict(deque); alerted=set(); findings=[]
     for event in events:
-        source=event['ip']; queue=queues[source]; cutoff=event['time']-timedelta(seconds=window_seconds)
+        source=event['ip']; host=event['host']; key=(host,source); queue=queues[key]; cutoff=event['time']-timedelta(seconds=window_seconds)
         while queue and queue[0]['time']<cutoff: queue.popleft()
-        if len(queue)<threshold: alerted.discard(source)
+        if len(queue)<threshold: alerted.discard(key)
         if event['kind']=='failure':
             queue.append(event)
-            if len(queue)>=threshold and source not in alerted:
-                findings.append(dict(rule='FAILURE_BURST',source=source,time=event['time'].isoformat(),
+            if len(queue)>=threshold and key not in alerted:
+                findings.append(dict(rule='FAILURE_BURST',source=source,host=host,time=event['time'].isoformat(),
                                      count=len(queue),users=sorted({e['user'] for e in queue})))
-                alerted.add(source)
+                alerted.add(key)
         elif len(queue)>=threshold:
-            findings.append(dict(rule='SUCCESS_AFTER_FAILURES',source=source,user=event['user'],
+            findings.append(dict(rule='SUCCESS_AFTER_FAILURES',source=source,host=host,user=event['user'],
                                  time=event['time'].isoformat(),count=len(queue),
-                                 note='Same source IP; may involve different accounts or shared NAT. Investigate, do not assume compromise.'))
+                                 note='Same destination host and source IP; may involve different accounts or shared NAT. Investigate, do not assume compromise.'))
     return dict(parsed_events=len(events),ignored_lines=ignored,window_seconds=window_seconds,threshold=threshold,
                 duplicate_policy='Repeated lines count as repeated events; deduplicate upstream if appropriate.',findings=findings)
 
@@ -53,3 +53,4 @@ def main():
         print(json.dumps(analyze(args.log.read_text(errors='replace').splitlines(),args.threshold,args.window),indent=2))
     except (OSError,ValueError) as exc: p.exit(2,str(exc)+'\n')
 if __name__=='__main__': main()
+

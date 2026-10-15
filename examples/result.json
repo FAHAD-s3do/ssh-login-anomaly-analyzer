@@ -1,6 +1,6 @@
 {
   "parsed_events": 7,
-  "ignored_lines": 0,
+  "ignored_lines": 1,
   "window_seconds": 300,
   "threshold": 5,
   "duplicate_policy": "Repeated lines count as repeated events; deduplicate upstream if appropriate.",
@@ -8,6 +8,7 @@
     {
       "rule": "FAILURE_BURST",
       "source": "192.0.2.20",
+      "host": "demo",
       "time": "2026-01-01T00:00:04+00:00",
       "count": 5,
       "users": [
@@ -17,10 +18,11 @@
     {
       "rule": "SUCCESS_AFTER_FAILURES",
       "source": "192.0.2.20",
+      "host": "demo",
       "user": "demo",
       "time": "2026-01-01T00:00:08+00:00",
       "count": 6,
-      "note": "Same source IP; may involve different accounts or shared NAT. Investigate, do not assume compromise."
+      "note": "Same destination host and source IP; may involve different accounts or shared NAT. Investigate, do not assume compromise."
     }
   ]
 }
