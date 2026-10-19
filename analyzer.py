@@ -19,15 +19,25 @@ def parse(lines):
             if stamp.tzinfo is None: raise ValueError()
             events.append(dict(time=stamp.astimezone(timezone.utc),kind='failure' if match['action']=='Failed password' else 'success',
                                host=match['host'],user=match['user'],ip=str(ipaddress.ip_address(match['ip'])),line=number))
-        except (ValueError,IndexError): ignored+=1
+        except (ValueError,IndexError,OverflowError): ignored+=1
     return sorted(events,key=lambda e:(e['time'],e['line'])),ignored
 
 
 def analyze(lines,threshold=5,window_seconds=300):
     if threshold<1 or window_seconds<1: raise ValueError('Threshold and window must be positive')
+    try:
+        window=timedelta(seconds=window_seconds)
+    except OverflowError as exc:
+        raise ValueError('Window exceeds supported datetime range') from exc
+    earliest=datetime.min.replace(tzinfo=timezone.utc)
     events,ignored=parse(lines); queues=defaultdict(deque); alerted=set(); findings=[]
     for event in events:
-        source=event['ip']; host=event['host']; key=(host,source); queue=queues[key]; cutoff=event['time']-timedelta(seconds=window_seconds)
+        source=event['ip']; host=event['host']; key=(host,source); queue=queues[key]
+        try:
+            cutoff=event['time']-window
+        except OverflowError:
+            # No representable event can be older than the minimum UTC date.
+            cutoff=earliest
         while queue and queue[0]['time']<cutoff: queue.popleft()
         if len(queue)<threshold: alerted.discard(key)
         if event['kind']=='failure':
@@ -53,4 +63,3 @@ def main():
         print(json.dumps(analyze(args.log.read_text(errors='replace').splitlines(),args.threshold,args.window),indent=2))
     except (OSError,ValueError) as exc: p.exit(2,str(exc)+'\n')
 if __name__=='__main__': main()
-
