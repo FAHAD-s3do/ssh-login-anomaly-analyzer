@@ -30,13 +30,17 @@ cutoff at the earliest representable UTC instant. Windows too large to represent
 as a Python timedelta are rejected with a clear error (CLI exit 2), even for empty
 input. These checks do not establish whether a log's timestamp is trustworthy.
 
+Ports must be complete ASCII decimal tokens of one to five digits in the range
+1–65535. Invalid ports are counted as ignored lines and do not affect findings.
+Whitespace-separated suffixes such as `ssh2` remain supported.
+
 ## Scope and limitations
 
 Only `TIMESTAMP HOST sshd[PID]: MESSAGE` (or `sshd:` without a PID) text with an ISO 8601 timestamp is accepted (for example rsyslog RFC3339-style output); classic `Oct 12 12:00:00` logs are ignored, not assigned an invented year/timezone. Duplicates count; deduplicate upstream when necessary. Same IP does not prove same user or actor; NAT and automation cause false positives. Input capped at 20 MiB. Ties use source line order. Logs may contain personal data; only synthetic documentation-range addresses are shipped. No blocking or live journald collection.
 
 ## Validation
 
-18 unit tests passed locally on Python 3.12.14, including minimum/maximum dates, timezone-conversion overflow, equivalent timezone instants and CLI error handling. Synthetic CLI examples were executed and results are included under `examples/`. No customer data, historical lab results or production effectiveness is claimed. CI configuration is supplied; remote CI status must be checked after publishing.
+21 unit tests passed locally on Python 3.12.14, including minimum/maximum dates, timezone-conversion overflow, equivalent timezone instants and CLI error handling. Synthetic CLI examples were executed and results are included under `examples/`. No customer data, historical lab results or production effectiveness is claimed. CI configuration is supplied; remote CI status must be checked after publishing.
 
 ## Files
 
@@ -49,3 +53,4 @@ Only `TIMESTAMP HOST sshd[PID]: MESSAGE` (or `sshd:` without a PID) text with an
 ## Safe operation
 
 Use inputs and hosts you own or are authorized to assess. Review reports before publication; real files, headers and logs can contain sensitive information. These tools do not establish that a system is secure or compromised.
+

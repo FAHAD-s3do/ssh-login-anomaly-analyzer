@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 
-PATTERN=re.compile(r'^(?P<stamp>\S+)\s+(?P<host>\S+)\s+sshd(?:\[\d+\])?: (?P<action>Failed password|Accepted password|Accepted publickey) for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+) port \d+')
+PATTERN=re.compile(r'^(?P<stamp>\S+)\s+(?P<host>\S+)\s+sshd(?:\[\d+\])?: (?P<action>Failed password|Accepted password|Accepted publickey) for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+) port (?P<port>\S+)(?:\s|$)')
 
 def parse(lines):
     events=[]; ignored=0
@@ -15,6 +15,9 @@ def parse(lines):
         match=PATTERN.search(line)
         try:
             if not match: raise ValueError()
+            port=match['port']
+            if (not port or len(port)>5 or any(c not in '0123456789' for c in port)
+                    or not 1 <= int(port) <= 65535): raise ValueError()
             stamp=datetime.fromisoformat(match['stamp'].replace('Z','+00:00'))
             if stamp.tzinfo is None: raise ValueError()
             events.append(dict(time=stamp.astimezone(timezone.utc),kind='failure' if match['action']=='Failed password' else 'success',
@@ -63,3 +66,4 @@ def main():
         print(json.dumps(analyze(args.log.read_text(errors='replace').splitlines(),args.threshold,args.window),indent=2))
     except (OSError,ValueError) as exc: p.exit(2,str(exc)+'\n')
 if __name__=='__main__': main()
+
