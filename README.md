@@ -34,13 +34,26 @@ Ports must be complete ASCII decimal tokens of one to five digits in the range
 1–65535. Invalid ports are counted as ignored lines and do not affect findings.
 Whitespace-separated suffixes such as `ssh2` remain supported.
 
+## Multi-account failure review
+
+```bash
+python3 analyzer.py examples/auth.log --threshold 5 --window 300 --min-users 3
+```
+
+Require both five failures and three distinct failed-login usernames in the same
+host/source window. The default minimum is 1, preserving existing burst behavior.
+Success-after-failures findings use the same distinct-user requirement. Usernames
+are matched exactly; shared NAT can combine unrelated users. This is a candidate
+password-spray signal, not proof of an attack. Expired usernames stop contributing
+to the threshold. Reports include the configured `min_users` value.
+
 ## Scope and limitations
 
 Only `TIMESTAMP HOST sshd[PID]: MESSAGE` (or `sshd:` without a PID) text with an ISO 8601 timestamp is accepted (for example rsyslog RFC3339-style output); classic `Oct 12 12:00:00` logs are ignored, not assigned an invented year/timezone. Duplicates count; deduplicate upstream when necessary. Same IP does not prove same user or actor; NAT and automation cause false positives. Input capped at 20 MiB. Ties use source line order. Logs may contain personal data; only synthetic documentation-range addresses are shipped. No blocking or live journald collection.
 
 ## Validation
 
-21 unit tests passed locally on Python 3.12.14, including minimum/maximum dates, timezone-conversion overflow, equivalent timezone instants and CLI error handling. Synthetic CLI examples were executed and results are included under `examples/`. No customer data, historical lab results or production effectiveness is claimed. CI configuration is supplied; remote CI status must be checked after publishing.
+26 unit tests passed locally on Python 3.12.14, including minimum/maximum dates, timezone-conversion overflow, equivalent timezone instants and CLI error handling. Synthetic CLI examples were executed and results are included under `examples/`. No customer data, historical lab results or production effectiveness is claimed. CI configuration is supplied; remote CI status must be checked after publishing.
 
 ## Files
 
@@ -53,4 +66,5 @@ Only `TIMESTAMP HOST sshd[PID]: MESSAGE` (or `sshd:` without a PID) text with an
 ## Safe operation
 
 Use inputs and hosts you own or are authorized to assess. Review reports before publication; real files, headers and logs can contain sensitive information. These tools do not establish that a system is secure or compromised.
+
 

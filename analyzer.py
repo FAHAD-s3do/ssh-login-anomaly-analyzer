@@ -26,7 +26,8 @@ def parse(lines):
     return sorted(events,key=lambda e:(e['time'],e['line'])),ignored
 
 
-def analyze(lines,threshold=5,window_seconds=300):
+def analyze(lines,threshold=5,window_seconds=300,min_users=1):
+    if type(min_users) is not int or min_users<1: raise ValueError('Minimum users must be a positive integer')
     if threshold<1 or window_seconds<1: raise ValueError('Threshold and window must be positive')
     try:
         window=timedelta(seconds=window_seconds)
@@ -42,28 +43,30 @@ def analyze(lines,threshold=5,window_seconds=300):
             # No representable event can be older than the minimum UTC date.
             cutoff=earliest
         while queue and queue[0]['time']<cutoff: queue.popleft()
-        if len(queue)<threshold: alerted.discard(key)
+        if len(queue)<threshold or len({e['user'] for e in queue})<min_users: alerted.discard(key)
         if event['kind']=='failure':
             queue.append(event)
-            if len(queue)>=threshold and key not in alerted:
+            if len(queue)>=threshold and len({e['user'] for e in queue})>=min_users and key not in alerted:
                 findings.append(dict(rule='FAILURE_BURST',source=source,host=host,time=event['time'].isoformat(),
                                      count=len(queue),users=sorted({e['user'] for e in queue})))
                 alerted.add(key)
-        elif len(queue)>=threshold:
+        elif len(queue)>=threshold and len({e['user'] for e in queue})>=min_users:
             findings.append(dict(rule='SUCCESS_AFTER_FAILURES',source=source,host=host,user=event['user'],
                                  time=event['time'].isoformat(),count=len(queue),
                                  note='Same destination host and source IP; may involve different accounts or shared NAT. Investigate, do not assume compromise.'))
-    return dict(parsed_events=len(events),ignored_lines=ignored,window_seconds=window_seconds,threshold=threshold,
+    return dict(parsed_events=len(events),ignored_lines=ignored,window_seconds=window_seconds,threshold=threshold,min_users=min_users,
                 duplicate_policy='Repeated lines count as repeated events; deduplicate upstream if appropriate.',findings=findings)
 
 
 def main():
     p=argparse.ArgumentParser(description=__doc__); p.add_argument('log',type=Path)
     p.add_argument('--threshold',type=int,default=5); p.add_argument('--window',type=int,default=300)
+    p.add_argument('--min-users',type=int,default=1,help='Require this many distinct failed-login usernames per host/source window')
     args=p.parse_args()
     try:
         if args.log.stat().st_size>20*1024*1024: raise ValueError('Input exceeds 20 MiB limit')
-        print(json.dumps(analyze(args.log.read_text(errors='replace').splitlines(),args.threshold,args.window),indent=2))
+        print(json.dumps(analyze(args.log.read_text(errors='replace').splitlines(),args.threshold,args.window,args.min_users),indent=2))
     except (OSError,ValueError) as exc: p.exit(2,str(exc)+'\n')
 if __name__=='__main__': main()
+
 
